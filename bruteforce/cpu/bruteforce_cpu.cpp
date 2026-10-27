@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
-#include "md5.h" // тут лежит сама функция хэширования
+#include "md5.h"
 
 using namespace std;
 
@@ -43,15 +43,12 @@ void start_bruteforce(string target_hash, int length) {
         }
         
         // логика перебора (как счетчик в машине)
-        // идем с конца строки и увеличиваем символ
         for (int i = length - 1; i >= 0; i--) {
             if (current_password[i] != chars[chars_len - 1]) {
-                // находим индекс текущего символа и берем следующий
                 size_t idx = chars.find(current_password[i]);
                 current_password[i] = chars[idx + 1];
                 break;
             } else {
-                // если дошли до последнего символа словаря, сбрасываем на первый
                 current_password[i] = chars[0];
             }
         }
@@ -59,10 +56,9 @@ void start_bruteforce(string target_hash, int length) {
 }
 
 int main(int argc, char* argv[]) {
-    // для теста возьмем пароль abc (его хэш ниже)
-    // потом поменяем на рандомный
-    string target = "900150983cd24fb0d6963f7d28e17f72"; // это хэш от "abc"
-    int length = 3; // длина пароля
+    // ищем пароль a1b2
+    string target = "f2e49af795161e14acf9d9245473a368"; 
+    int length = 4;
     
     cout << "старт перебора на cpu" << endl;
     start_bruteforce(target, length);
