@@ -2,7 +2,7 @@
 
 Выполняли:
 * Артем (artemon228poke-maker) — брутфорс хэша MD5 на CPU и GPU (Metal)
-* tokmakovakata9-dev — матричные вычисления (CUDA)
+* tokmakovakata9-dev — матричные вычисления (OpenCL)
 
 В папке `bruteforce` находится код для перебора пароля по хэшу. 
 В папке `matrix` находится код для матричных вычислений.
