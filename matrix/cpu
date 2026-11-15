@@ -1,0 +1,61 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+// Функция для вычисления алгебраических дополнений на CPU
+void cpu_algebraic_complements(float* input, float* output, int n) {
+    for (int row = 0; row < n; row++) {
+        for (int col = 0; col < n; col++) {
+            float minor[16];
+            int m_idx = 0;
+            for (int i = 0; i < n; i++) {
+                if (i == row) continue;
+                for (int j = 0; j < n; j++) {
+                    if (j == col) continue;
+                    minor[m_idx++] = input[i * n + j];
+                }
+            }
+
+            float det = 0.0f;
+            if (n == 2) {
+                det = minor[0];
+            }
+            else if (n == 3) {
+                det = minor[0] * minor[3] - minor[1] * minor[2];
+            }
+            else if (n == 4) {
+                det = minor[0] * (minor[4] * minor[8] - minor[5] * minor[7])
+                    - minor[1] * (minor[3] * minor[8] - minor[5] * minor[6])
+                    + minor[2] * (minor[3] * minor[7] - minor[4] * minor[6]);
+            }
+
+            float sign = ((row + col) % 2 == 0) ? 1.0f : -1.0f;
+            output[row * n + col] = sign * det;
+        }
+    }
+}
+
+int main() {
+    int n = 3; // Размер матрицы
+    int total = n * n;
+    float* input = (float*)malloc(total * sizeof(float));
+    float* output = (float*)malloc(total * sizeof(float));
+
+    // Тестовая матрица
+    for (int i = 0; i < total; i++) input[i] = (float)(i + 1);
+
+    clock_t start = clock();
+    cpu_algebraic_complements(input, output, n);
+    clock_t end = clock();
+
+    printf("CPU Time: %f sec\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+
+    printf("Result (CPU):\n");
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) printf("%.1f ", output[i * n + j]);
+        printf("\n");
+    }
+
+    free(input); free(output);
+    return 0;
+}
