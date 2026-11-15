@@ -1,0 +1,139 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <CL/cl.h>
+#include <windows.h> 
+
+// Ядро OpenCL
+const char* kernel_source =
+"__kernel void algebraic_complements(__global const float* input, __global float* output, const int n) {\n"
+"    int idx = get_global_id(0);\n"
+"    if (idx >= n * n) return;\n"
+"    int row = idx / n;\n"
+"    int col = idx % n;\n"
+"    float minor[16];\n"
+"    int m_idx = 0;\n"
+"    for (int i = 0; i < n; i++) {\n"
+"        if (i == row) continue;\n"
+"        for (int j = 0; j < n; j++) {\n"
+"            if (j == col) continue;\n"
+"            minor[m_idx++] = input[i * n + j];\n"
+"        }\n"
+"    }\n"
+"    float det = 0.0f;\n"
+"    if (n == 2) det = minor[0];\n"
+"    else if (n == 3) det = minor[0]*minor[3] - minor[1]*minor[2];\n"
+"    else if (n == 4) det = minor[0]*(minor[4]*minor[8] - minor[5]*minor[7]) - minor[1]*(minor[3]*minor[8] - minor[5]*minor[6]) + minor[2]*(minor[3]*minor[7] - minor[4]*minor[6]);\n"
+"    float sign = ((row + col) % 2 == 0) ? 1.0f : -1.0f;\n"
+"    output[idx] = sign * det;\n"
+"}\n";
+
+// Функция для вычисления на CPU (для проверки)
+void cpu_algebraic_complements(float* input, float* output, int n) {
+    for (int row = 0; row < n; row++) {
+        for (int col = 0; col < n; col++) {
+            float minor[16];
+            int m_idx = 0;
+            for (int i = 0; i < n; i++) {
+                if (i == row) continue;
+                for (int j = 0; j < n; j++) {
+                    if (j == col) continue;
+                    minor[m_idx++] = input[i * n + j];
+                }
+            }
+            float det = 0.0f;
+            if (n == 2) det = minor[0];
+            else if (n == 3) det = minor[0] * minor[3] - minor[1] * minor[2];
+            else if (n == 4) det = minor[0] * (minor[4] * minor[8] - minor[5] * minor[7]) - minor[1] * (minor[3] * minor[8] - minor[5] * minor[6]) + minor[2] * (minor[3] * minor[7] - minor[4] * minor[6]);
+            float sign = ((row + col) % 2 == 0) ? 1.0f : -1.0f;
+            output[row * n + col] = sign * det;
+        }
+    }
+}
+
+int main() {
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    int n = 4; // Размер матрицы
+    int total = n * n;
+    size_t data_size = total * sizeof(float);
+
+    float* input = (float*)malloc(data_size);
+    float* output_gpu = (float*)malloc(data_size);
+    float* output_cpu = (float*)malloc(data_size);
+
+    for (int i = 0; i < total; i++) input[i] = (float)(i + 1);
+
+    printf("Source matrix %dx%d:\n", n, n);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            printf("%.0f ", input[i * n + j]);
+        }
+        printf("\n");
+    }
+
+    // 1. Считаем на CPU (для проверки)
+    clock_t cpu_start = clock();
+    cpu_algebraic_complements(input, output_cpu, n);
+    clock_t cpu_end = clock();
+    double cpu_time = ((double)(cpu_end - cpu_start)) / CLOCKS_PER_SEC;
+
+    // 2. Считаем на GPU (OpenCL)
+    cl_platform_id platform;
+    cl_device_id device;
+    clGetPlatformIDs(1, &platform, NULL);
+    clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL);
+
+    cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, NULL);
+    cl_command_queue queue = clCreateCommandQueue(context, device, 0, NULL);
+
+    cl_program program = clCreateProgramWithSource(context, 1, &kernel_source, NULL, NULL);
+    clBuildProgram(program, 1, &device, NULL, NULL, NULL);
+    cl_kernel kernel = clCreateKernel(program, "algebraic_complements", NULL);
+
+    cl_mem input_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, data_size, input, NULL);
+    cl_mem output_buf = clCreateBuffer(context, CL_MEM_WRITE_ONLY, data_size, NULL, NULL);
+
+    clSetKernelArg(kernel, 0, sizeof(cl_mem), &input_buf);
+    clSetKernelArg(kernel, 1, sizeof(cl_mem), &output_buf);
+    clSetKernelArg(kernel, 2, sizeof(int), &n);
+
+    size_t global_work_size = total;
+
+    clock_t gpu_start = clock();
+    clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL);
+    clFinish(queue);
+    clock_t gpu_end = clock();
+    double gpu_time = ((double)(gpu_end - gpu_start)) / CLOCKS_PER_SEC;
+
+    clEnqueueReadBuffer(queue, output_buf, CL_TRUE, 0, data_size, output_gpu, 0, NULL, NULL);
+
+    // 3. Вывод времени 
+    printf("\nTime CPU: %f s\n", cpu_time);
+    printf("Time GPU: %f s\n", gpu_time);
+
+    // 4. Вывод результата матрицы 
+    printf("\nAlgebraic complements matrix (GPU):\n");
+    int match = 1;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            printf("%.1f ", output_gpu[i * n + j]);
+            if (output_gpu[i * n + j] != output_cpu[i * n + j]) {
+                match = 0;
+            }
+        }
+        printf("\n");
+    }
+
+    // 5. Проверка 
+    printf(match ? "\nRESULTS MATCH!\n" : "\nERROR: RESULTS DO NOT MATCH!\n");
+
+    // Очистка памяти
+    clReleaseMemObject(input_buf); clReleaseMemObject(output_buf);
+    clReleaseKernel(kernel); clReleaseProgram(program);
+    clReleaseCommandQueue(queue); clReleaseContext(context);
+    free(input); free(output_gpu); free(output_cpu);
+
+    return 0;
+}
